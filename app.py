@@ -12,8 +12,10 @@ BASE_URL = f"https://www.thesportsdb.com/api/v1/json/{API_KEY}"
 
 @app.route('/verify', methods=['GET'])
 def verify_connection():
+    print("Request received at /verify endpoint")
     player_name = request.args.get('player')
     target_club = request.args.get('club')
+    print(f"Player: {player_name}, Club: {target_club}")
 
     if not player_name or not target_club:
         return jsonify({"error": "Missing player or club"}), 400
