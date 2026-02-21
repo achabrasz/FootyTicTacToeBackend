@@ -9,16 +9,49 @@ app = Flask(__name__)
 API_KEY = "3"
 BASE_URL = f"https://www.thesportsdb.com/api/v1/json/{API_KEY}"
 
+AVAILABLE_CLUBS = [
+    "Manchester United",
+    "Real Madrid",
+    "Barcelona",
+    "Bayern Munich",
+    "Juventus",
+    "Liverpool",
+    "Paris SG",
+    "AC Milan",
+    "Chelsea",
+    "Arsenal"
+]
+
+@app.route('/start')
+def start():
+    return "Welcome to the Football Player Club History API! Use the /verify endpoint to check if a player has played for two clubs."
+
+@app.route('/clubs', methods=['GET'])
+def get_clubs():
+    return jsonify({"available_clubs": AVAILABLE_CLUBS})
+
+@app.route('/club_badge', methods=['GET'])
+def get_club_badge():
+    club_name = request.args.get('club')
+    try:
+        search_url = f"{BASE_URL}/searchteams.php?t={club_name.replace(' ', '_')}"
+        data = requests.get(search_url).json()
+        if data.get('teams'):
+            return data['teams'][0].get('strBadge')
+    except:
+        return None
+    return None
 
 @app.route('/verify', methods=['GET'])
 def verify_connection():
     print("Request received at /verify endpoint")
     player_name = request.args.get('player')
-    target_club = request.args.get('club')
-    print(f"Player: {player_name}, Club: {target_club}")
+    club_one = request.args.get('club1')
+    club_two = request.args.get('club2')
+    print(f"Player: {player_name}, Club1: {club_one}, Club2: {club_two}")
 
-    if not player_name or not target_club:
-        return jsonify({"error": "Missing player or club"}), 400
+    if not player_name or not club_one or not club_two:
+        return jsonify({"error": "Missing player or club1 or club2"}), 400
 
     try:
         # Step 1: Search for player to get ID
@@ -43,11 +76,12 @@ def verify_connection():
                 all_clubs.append(team.get('strFormerTeam', '').lower())
 
         # Step 3: Check for match
-        played_there = any(target_club.lower() in club for club in all_clubs)
+        played_there = any(club_one.lower() in club for club in all_clubs) and any(club_two.lower() in club for club in all_clubs)
 
         return jsonify({
             "player": player['strPlayer'],
-            "target_club": target_club,
+            "club1": club_one,
+            "club2": club_two,
             "played": played_there,
             "clubs_found": all_clubs
         })
