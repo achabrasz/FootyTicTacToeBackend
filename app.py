@@ -52,12 +52,22 @@ def start():
 
 @app.route('/clubs', methods=['GET'])
 def get_clubs():
-    return jsonify({"available_clubs": TOP_AVAILABLE_CLUBS + NATIONAL_TEAMS})
+    return jsonify({"available_clubs": AVAILABLE_CLUBS})
+
+
+@app.route('/nationalTeams', methods=['GET'])
+def get_national_teams():
+    return jsonify({"available_national_teams": NATIONAL_TEAMS})
 
 
 @app.route('/topClubs', methods=['GET'])
 def get_top_clubs():
-    return jsonify({"available_clubs": AVAILABLE_CLUBS + NATIONAL_TEAMS})
+    return jsonify({"available_clubs": AVAILABLE_CLUBS})
+
+
+@app.route('/topNationalTeams', methods=['GET'])
+def get_top_national_teams():
+    return jsonify({"available_national_teams": TOP_NATIONAL_TEAMS})
 
 
 @app.route('/club_badge', methods=['GET'])
