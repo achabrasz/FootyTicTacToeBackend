@@ -10,25 +10,55 @@ API_KEY = "3"
 BASE_URL = f"https://www.thesportsdb.com/api/v1/json/{API_KEY}"
 
 AVAILABLE_CLUBS = [
-    "Manchester United",
-    "Real Madrid",
-    "Barcelona",
-    "Bayern Munich",
-    "Juventus",
-    "Liverpool",
-    "Paris SG",
-    "AC Milan",
-    "Chelsea",
-    "Arsenal"
+    # The Top Tier
+    "Real Madrid", "Barcelona", "Manchester United", "Manchester City",
+    "Liverpool", "Chelsea", "Arsenal", "Bayern Munich", "Juventus",
+    "Inter Milan", "AC Milan", "Paris SG", "Atletico Madrid", "Borussia Dortmund",
+
+    # The Talent Factories
+    "Ajax", "Benfica", "Porto", "RB Leipzig", "Monaco", "PSV Eindhoven",
+
+    # Historic & Cult Clubs
+    "Tottenham Hotspur", "AS Roma", "Napoli", "Lazio", "Sevilla", "Valencia",
+    "Bayer Leverkusen", "Marseille", "Lyon", "Aston Villa", "Newcastle",
+
+    # South American Giants
+    "Boca Juniors", "River Plate", "Santos", "Flamengo"
+]
+
+NATIONAL_TEAMS = [
+    "Brazil", "Argentina", "France", "Germany", "England",
+    "Spain", "Portugal", "Netherlands", "Italy", "Belgium",
+    "Croatia", "Uruguay", "Morocco", "Japan", "USA", "Mexico"
+]
+
+TOP_AVAILABLE_CLUBS = [
+    # The Top Tier
+    "Real Madrid", "Barcelona", "Manchester United", "Manchester City",
+    "Liverpool", "Chelsea", "Arsenal", "Bayern Munich", "Juventus",
+    "Inter Milan", "AC Milan", "Paris SG", "Atletico Madrid", "Borussia Dortmund",
+    "Tottenham Hotspur"
+]
+
+TOP_NATIONAL_TEAMS = [
+    "Brazil", "Argentina", "France", "Germany", "England",
+    "Spain", "Portugal", "Netherlands", "Italy", "Uruguay"
 ]
 
 @app.route('/start')
 def start():
     return "Welcome to the Football Player Club History API! Use the /verify endpoint to check if a player has played for two clubs."
 
+
 @app.route('/clubs', methods=['GET'])
 def get_clubs():
-    return jsonify({"available_clubs": AVAILABLE_CLUBS})
+    return jsonify({"available_clubs": TOP_AVAILABLE_CLUBS + NATIONAL_TEAMS})
+
+
+@app.route('/topClubs', methods=['GET'])
+def get_top_clubs():
+    return jsonify({"available_clubs": AVAILABLE_CLUBS + NATIONAL_TEAMS})
+
 
 @app.route('/club_badge', methods=['GET'])
 def get_club_badge():
@@ -41,6 +71,7 @@ def get_club_badge():
     except:
         return None
     return None
+
 
 @app.route('/verify', methods=['GET'])
 def verify_connection():
@@ -76,7 +107,8 @@ def verify_connection():
                 all_clubs.append(team.get('strFormerTeam', '').lower())
 
         # Step 3: Check for match
-        played_there = any(club_one.lower() in club for club in all_clubs) and any(club_two.lower() in club for club in all_clubs)
+        played_there = any(club_one.lower() in club for club in all_clubs) and any(
+            club_two.lower() in club for club in all_clubs)
 
         return jsonify({
             "player": player['strPlayer'],
