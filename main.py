@@ -4,54 +4,64 @@ from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
-# Replace with your actual RapidAPI Key from apidojo
+# Use the API-Football Host and your Key
 RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY")
-
-if not RAPIDAPI_KEY:
-    raise ValueError("No RAPIDAPI_KEY set in Environment Variables!")
 HEADERS = {
     "X-RapidAPI-Key": RAPIDAPI_KEY,
-    "X-RapidAPI-Host": "transfermarkt-api.p.rapidapi.com"
+    "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com"
 }
 
 
 @app.route('/verify', methods=['GET'])
-def verify_player_club():
+def verify():
     player_name = request.args.get('player')
-    club_name = request.args.get('club')
+    club_target = request.args.get('club')
 
-    if not player_name or not club_name:
-        return jsonify({"error": "Missing player or club parameter"}), 400
+    if not player_name or not club_target:
+        return jsonify({"error": "Missing params"}), 400
 
     try:
-        # Step 1: Search for the Player ID
-        search_url = "https://transfermarkt-api.p.rapidapi.com/players/search"
-        search_params = {"query": player_name, "domain": "com"}
-        search_response = requests.get(search_url, headers=HEADERS, params=search_params).json()
+        # 1. Search for the player to get their ID
+        search_url = "https://api-football-v1.p.rapidapi.com/v3/players"
+        # We search by name. Note: API-Football often requires a 'search' param of at least 3 chars
+        search_params = {"search": player_name}
+        search_res = requests.get(search_url, headers=HEADERS, params=search_params).json()
 
-        if not search_response.get('results'):
+        if not search_res.get('response'):
             return jsonify({"played": False, "reason": "Player not found"}), 404
 
-        player_id = search_response['results'][0]['id']
+        # Get the first matching player ID
+        player_id = search_res['response'][0]['player']['id']
 
-        # Step 2: Get Player Transfer/Club History
-        history_url = f"https://transfermarkt-api.p.rapidapi.com/players/get-transfer-history"
-        history_params = {"id": player_id, "domain": "com"}
-        history_response = requests.get(history_url, headers=HEADERS, params=history_params).json()
+        # 2. Get all seasons/teams for this player
+        # We query the player's info which includes their statistics (and thus their teams)
+        # To be safe, we can check the 'transfers' endpoint or just 'players' with seasons
+        history_url = "https://api-football-v1.p.rapidapi.com/v3/players"
+        # We'll fetch the most recent data; for Tic Tac Toe, you might need to loop seasons
+        # but a better endpoint for "all clubs ever" is the 'transfers' endpoint:
 
-        # Step 3: Check if club name exists in history
-        # History usually contains 'oldClubName' and 'newClubName'
+        transfer_url = "https://api-football-v1.p.rapidapi.com/v3/transfers"
+        transfer_params = {"player": player_id}
+        transfer_res = requests.get(transfer_url, headers=HEADERS, params=transfer_params).json()
+
         played_there = False
-        for transfer in history_response.get('transfers', []):
-            if (club_name.lower() in transfer.get('oldClubName', '').lower() or
-                    club_name.lower() in transfer.get('newClubName', '').lower()):
+        clubs_found = []
+
+        # Check transfer history
+        for t in transfer_res.get('response', []):
+            in_team = t['teams']['in']['name'].lower()
+            out_team = t['teams']['out']['name'].lower()
+            clubs_found.extend([in_team, out_team])
+
+            if club_target.lower() in in_team or club_target.lower() in out_team:
                 played_there = True
                 break
 
         return jsonify({
             "player": player_name,
-            "club": club_name,
-            "played": played_there
+            "target_club": club_target,
+            "played": played_there,
+            "history_snippet": list(set(clubs_found))[:5]  # Show a few for debugging
         })
 
     except Exception as e:
