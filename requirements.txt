@@ -1,6 +1,9 @@
 flask
 flask-cors
+flask-socketio
 flask-sqlalchemy
+python-socketio
+python-engineio
 requests
 gunicorn
 python-dotenv
