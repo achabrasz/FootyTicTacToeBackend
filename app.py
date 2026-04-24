@@ -5,6 +5,7 @@ import string
 from datetime import datetime
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.sqlite import JSON
 
@@ -15,7 +16,10 @@ CORS(app,
      origins="*",
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      allow_headers=["Content-Type", "Authorization"],
-     supports_credentials=False)  # Set to False to avoid credential issues with wildcard origin
+     supports_credentials=False)
+
+# Initialize SocketIO with CORS enabled
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///footytictactoe.db')
@@ -73,7 +77,8 @@ class Room(db.Model):
     game_started = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     current_turn_player_id = db.Column(db.String(50), nullable=True)
-    
+    hide_clubs = db.Column(db.Boolean, default=False)
+
     players = db.relationship('Player', back_populates='room', cascade='all, delete-orphan')
     game_history = db.relationship('GameHistory', back_populates='room', cascade='all, delete-orphan')
 
@@ -85,6 +90,7 @@ class Room(db.Model):
             'gameStarted': self.game_started,
             'createdAt': self.created_at.isoformat(),
             'currentTurnPlayerId': self.current_turn_player_id,
+            'hideClubs': self.hide_clubs,
             'players': [p.to_dict() for p in self.players]
         }
 
@@ -153,6 +159,49 @@ def get_room_or_404(room_code):
     if not room:
         return None, jsonify({"error": "Room not found"}), 404
     return room, None, None
+
+# ============== WEBSOCKET EVENTS ==============
+
+@socketio.on('connect')
+def handle_connect():
+    """Handle WebSocket connection"""
+    print(f'Client connected: {request.sid}')
+
+@socketio.on('join_room')
+def on_join_room(data):
+    """Join a room's WebSocket broadcast"""
+    room_code = data.get('roomCode')
+    if room_code:
+        join_room(room_code)
+        print(f'Client {request.sid} joined room {room_code}')
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle WebSocket disconnection"""
+    print(f'Client disconnected: {request.sid}')
+
+def broadcast_room_update(room_code):
+    """Broadcast room update to all players"""
+    room = Room.query.filter_by(room_code=room_code).first()
+    if room:
+        socketio.emit('room-update', {
+            'type': 'room-update',
+            'room': room.to_dict()
+        }, room=room_code)
+
+def broadcast_turn_change(room_code, next_player_id):
+    """Broadcast turn change to all players"""
+    socketio.emit('turn-changed', {
+        'type': 'turn-changed',
+        'nextPlayerId': next_player_id
+    }, room=room_code)
+
+def broadcast_guess_result(room_code, guess_result):
+    """Broadcast guess verification result to all players"""
+    socketio.emit('guess-result', {
+        'type': 'guess-result',
+        'result': guess_result
+    }, room=room_code)
 
 # ============== ORIGINAL ENDPOINTS ==============
 
@@ -239,6 +288,7 @@ def create_room():
     """Create a new room"""
     data = request.get_json()
     creator_name = data.get('creatorName')
+    hide_clubs = data.get('hideClubs', False)
     
     if not creator_name:
         return jsonify({"error": "Missing creatorName"}), 400
@@ -250,7 +300,8 @@ def create_room():
         room = Room(
             room_code=room_code,
             creator_id=player_id,
-            creator_name=creator_name
+            creator_name=creator_name,
+            hide_clubs=hide_clubs
         )
         
         creator = Player(
@@ -346,6 +397,8 @@ def select_club(room_code):
         
         player.club = club
         db.session.commit()
+        
+        broadcast_room_update(room_code)
         
         return jsonify({
             "success": True,
@@ -465,6 +518,8 @@ def verify_guess(room_code):
         db.session.add(history_entry)
         db.session.commit()
         
+        broadcast_room_update(room_code)
+        
         # Build scores dict
         all_players_scores = {p.player_id: p.score for p in room.players}
         
@@ -514,6 +569,9 @@ def next_turn(room_code):
         
         room.current_turn_player_id = next_player.player_id
         db.session.commit()
+        
+        broadcast_room_update(room_code)
+        broadcast_turn_change(room_code, next_player.player_id)
         
         all_scores = {p.player_id: p.score for p in room.players}
         
@@ -600,6 +658,19 @@ def delete_room(room_code):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+@app.route('/rooms/<room_code>/subscribe', methods=['GET'])
+def subscribe_to_room(room_code):
+    """WebSocket subscription endpoint for a room"""
+    room = Room.query.filter_by(room_code=room_code).first()
+    if not room:
+        return jsonify({"error": "Room not found"}), 404
+    
+    return jsonify({
+        "status": "connected",
+        "roomCode": room_code,
+        "message": "Use WebSocket to connect to this room"
+    }), 200
+
 # ============== ERROR HANDLERS & DB INITIALIZATION ==============
 
 @app.before_request
@@ -619,4 +690,6 @@ def internal_error(error):
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    app.run(host='0.0.0.0', port=5005, debug=True)
+    
+    # Use socketio.run instead of app.run to enable WebSocket support
+    socketio.run(app, host='0.0.0.0', port=5005, debug=True, allow_unsafe_werkzeug=True)
